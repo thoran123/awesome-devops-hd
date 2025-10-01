@@ -8,14 +8,14 @@
   apiVersion: v1
   kind: ConfigMap
   metadata:
-    name: awesome-app-config
-    labels:
-      app: awesome-app
+  name: awesome-app-config
+  labels:
+    app: awesome-app
   data:
-    NODE_ENV: "production"
-    APP_VERSION: "1.0.0"
+  NODE_ENV: "production"
+  APP_VERSION: "1.0.0"
   
-  ---
+---
   apiVersion: v1
   kind: Secret
   metadata:
