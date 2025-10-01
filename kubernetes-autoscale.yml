@@ -80,7 +80,7 @@ spec:
       # Main Application Container
       containers:
       - name: awesome-app
-        image: ghcr.io/your-username/awesome-app:latest
+        image: ghcr.io/thoran123/awesome-app:latest
         imagePullPolicy: Always
         
         ports:
