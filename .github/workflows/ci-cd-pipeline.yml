@@ -244,11 +244,8 @@ jobs:
       - name: 🚀 Deploy with Blue-Green Strategy
         run: |
           echo "🔵 Deploying to Production..."
+          kubectl delete deployment awesome-app -n production --ignore-not-found=true
           kubectl apply -f kubernetes-autoscale.yml --namespace=production
-          kubectl set image deployment/awesome-app \
-            awesome-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }} \
-            --namespace=production \
-            --record
           kubectl rollout status deployment/awesome-app \
             --namespace=production \
             --timeout=10m
