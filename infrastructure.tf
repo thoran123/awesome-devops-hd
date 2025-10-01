@@ -174,22 +174,21 @@ resource "azurerm_kubernetes_cluster" "main" {
 
   # Default node pool with AUTOSCALING
   default_node_pool {
-    name                = "default"
-    vm_size             = "Standard_D2s_v3"
-    vnet_subnet_id      = azurerm_subnet.aks.id
-    enable_auto_scaling = true
-    min_count           = 2
-    max_count           = 10
-    node_count          = 3
-    os_disk_size_gb     = 30
-    
-    # Node labels for workload optimization
-    node_labels = {
-      "workload" = "general"
-    }
-
-    tags = local.common_tags
+  name                = "default"
+  vm_size             = "Standard_D2s_v3"
+  vnet_subnet_id      = azurerm_subnet.aks.id
+  enable_auto_scaling = true
+  min_count           = 2
+  max_count           = 10
+  # node_count removed - not compatible with auto-scaling
+  os_disk_size_gb     = 30
+  
+  node_labels = {
+    "workload" = "general"
   }
+
+  tags = local.common_tags
+}
 
   # System-assigned managed identity
   identity {
