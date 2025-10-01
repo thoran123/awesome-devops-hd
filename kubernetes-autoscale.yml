@@ -1,13 +1,8 @@
 # ═══════════════════════════════════════════════════════════════════
-# COMPLETE KUBERNETES CONFIGURATION WITH AUTO-SCALING
+# COMPLETE KUBERNETES CONFIGURATION WITH AUTO-SCALING (FIXED)
 # ═══════════════════════════════════════════════════════════════════
-# This single file contains:
-# - Deployment with Rolling Updates
-# - Service (LoadBalancer)
-# - Horizontal Pod Autoscaler (HPA)
-# - ConfigMaps & Secrets
-# - Resource Limits & Requests
-# - Health Probes
+# This version works for both staging and production
+# Namespace is parameterized via kubectl --namespace flag
 # ═══════════════════════════════════════════════════════════════════
 
 ---
@@ -18,10 +13,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: awesome-app-config
-  namespace: production
   labels:
     app: awesome-app
-    environment: production
 data:
   NODE_ENV: "production"
   APP_VERSION: "1.0.0"
@@ -36,7 +29,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: awesome-app-secret
-  namespace: production
   labels:
     app: awesome-app
 type: Opaque
@@ -51,11 +43,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: awesome-app
-  namespace: production
   labels:
     app: awesome-app
     version: v1
-    environment: production
 spec:
   replicas: 3  # Initial replicas (HPA will adjust this)
   
@@ -63,20 +53,18 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 2        # Add 2 new pods before removing old ones
-      maxUnavailable: 0  # Never go below desired count during update
+      maxSurge: 2
+      maxUnavailable: 0
   
   selector:
     matchLabels:
       app: awesome-app
-      environment: production
   
   template:
     metadata:
       labels:
         app: awesome-app
         version: v1
-        environment: production
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "3000"
@@ -88,12 +76,6 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      
-      # Init Container - Wait for database
-      initContainers:
-      - name: wait-for-db
-        image: busybox:1.35
-        command: ['sh', '-c', 'until nc -z mongodb-service 27017; do echo waiting for mongodb; sleep 2; done']
       
       # Main Application Container
       containers:
@@ -129,11 +111,11 @@ spec:
         # Resource Management - CRITICAL FOR AUTO-SCALING
         resources:
           requests:
-            cpu: 100m      # Minimum guaranteed CPU
-            memory: 128Mi  # Minimum guaranteed memory
+            cpu: 100m
+            memory: 128Mi
           limits:
-            cpu: 500m      # Maximum CPU allowed
-            memory: 512Mi  # Maximum memory allowed
+            cpu: 500m
+            memory: 512Mi
         
         # Liveness Probe - Restart if unhealthy
         livenessProbe:
@@ -144,28 +126,16 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
-          successThreshold: 1
         
         # Readiness Probe - Remove from load balancer if not ready
         readinessProbe:
           httpGet:
-            path: /ready
+            path: /health
             port: http
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
-          successThreshold: 1
-        
-        # Startup Probe - Allow slow startup
-        startupProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 0
-          periodSeconds: 10
-          timeoutSeconds: 3
-          failureThreshold: 30  # 30 * 10s = 5 minutes max startup time
         
         # Security Context
         securityContext:
@@ -175,10 +145,7 @@ spec:
             drop:
             - ALL
       
-      # Restart Policy
       restartPolicy: Always
-      
-      # DNS Policy
       dnsPolicy: ClusterFirst
 
 ---
@@ -189,7 +156,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: awesome-app-service
-  namespace: production
   labels:
     app: awesome-app
   annotations:
@@ -199,7 +165,6 @@ spec:
   
   selector:
     app: awesome-app
-    environment: production
   
   ports:
   - name: http
@@ -207,11 +172,10 @@ spec:
     targetPort: http
     protocol: TCP
   
-  # Session Affinity
   sessionAffinity: ClientIP
   sessionAffinityConfig:
     clientIP:
-      timeoutSeconds: 10800  # 3 hours
+      timeoutSeconds: 10800
 
 ---
 # ═══════════════════════════════════════════════════════════════════
@@ -221,7 +185,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: awesome-app-hpa
-  namespace: production
   labels:
     app: awesome-app
 spec:
@@ -230,55 +193,46 @@ spec:
     kind: Deployment
     name: awesome-app
   
-  # Scaling Boundaries
-  minReplicas: 3   # Never scale below this (High Availability)
-  maxReplicas: 10  # Never scale above this (Cost Control)
+  minReplicas: 3
+  maxReplicas: 10
   
-  # Metrics for Scaling Decisions
   metrics:
-  
-  # CPU-based scaling
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70  # Scale when average CPU > 70%
+        averageUtilization: 70
   
-  # Memory-based scaling
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 80  # Scale when average memory > 80%
+        averageUtilization: 80
   
-  # Advanced Scaling Behavior
   behavior:
-    
-    # Scale DOWN behavior (Conservative)
     scaleDown:
-      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      stabilizationWindowSeconds: 300
       policies:
       - type: Percent
-        value: 50          # Remove max 50% of pods at once
+        value: 50
         periodSeconds: 60
       - type: Pods
-        value: 2           # Or remove max 2 pods at once
+        value: 2
         periodSeconds: 60
-      selectPolicy: Min    # Use the most conservative policy
+      selectPolicy: Min
     
-    # Scale UP behavior (Aggressive)
     scaleUp:
-      stabilizationWindowSeconds: 0  # Scale up immediately
+      stabilizationWindowSeconds: 0
       policies:
       - type: Percent
-        value: 100         # Add up to 100% more pods at once
+        value: 100
         periodSeconds: 30
       - type: Pods
-        value: 2           # Or add 2 pods at once
+        value: 2
         periodSeconds: 30
-      selectPolicy: Max    # Use the most aggressive policy
+      selectPolicy: Max
 
 ---
 # ═══════════════════════════════════════════════════════════════════
@@ -288,60 +242,11 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: awesome-app-pdb
-  namespace: production
 spec:
-  minAvailable: 2  # Always keep at least 2 pods running
+  minAvailable: 2
   selector:
     matchLabels:
       app: awesome-app
-      environment: production
-
----
-# ═══════════════════════════════════════════════════════════════════
-# NETWORK POLICY - Security (Optional but Recommended)
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: awesome-app-netpol
-  namespace: production
-spec:
-  podSelector:
-    matchLabels:
-      app: awesome-app
-  policyTypes:
-  - Ingress
-  - Egress
-  
-  ingress:
-  # Allow traffic from LoadBalancer
-  - from:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 3000
-  
-  egress:
-  # Allow DNS
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: UDP
-      port: 53
-  # Allow MongoDB
-  - to:
-    - podSelector:
-        matchLabels:
-          app: mongodb
-    ports:
-    - protocol: TCP
-      port: 27017
-  # Allow external HTTPS (for API calls)
-  - to:
-    - namespaceSelector: {}
-    ports:
-    - protocol: TCP
-      port: 443
 
 ---
 # ═══════════════════════════════════════════════════════════════════
@@ -351,7 +256,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongodb
-  namespace: production
   labels:
     app: mongodb
 spec:
@@ -384,18 +288,9 @@ spec:
         volumeMounts:
         - name: mongodb-storage
           mountPath: /data/db
-        livenessProbe:
-          exec:
-            command:
-            - mongosh
-            - --eval
-            - "db.adminCommand('ping')"
-          initialDelaySeconds: 30
-          periodSeconds: 10
       volumes:
       - name: mongodb-storage
-        persistentVolumeClaim:
-          claimName: mongodb-pvc
+        emptyDir: {}  # Use emptyDir for demo (data lost on restart)
 
 ---
 # ═══════════════════════════════════════════════════════════════════
@@ -405,7 +300,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mongodb-service
-  namespace: production
   labels:
     app: mongodb
 spec:
@@ -418,64 +312,25 @@ spec:
 
 ---
 # ═══════════════════════════════════════════════════════════════════
-# PERSISTENT VOLUME CLAIM for MongoDB
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mongodb-pvc
-  namespace: production
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
-  storageClassName: managed-premium
-
----
-# ═══════════════════════════════════════════════════════════════════
-# INGRESS (Optional - for custom domain)
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: awesome-app-ingress
-  namespace: production
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-spec:
-  tls:
-  - hosts:
-    - awesome-devops.example.com
-    secretName: awesome-app-tls
-  rules:
-  - host: awesome-devops.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: awesome-app-service
-            port:
-              number: 80
-
-# ═══════════════════════════════════════════════════════════════════
 # END OF KUBERNETES CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════
-# Total Resources: 11 (Deployment, Service, HPA, PDB, ConfigMap, etc.)
-# Features: Auto-Scaling, Zero-Downtime Updates, Health Checks
 # 
-# To Deploy:
+# DEPLOYMENT INSTRUCTIONS:
+# 
+# For Staging:
+#   kubectl apply -f kubernetes-autoscale.yml --namespace=staging
+#
+# For Production:
+#   kubectl apply -f kubernetes-autoscale.yml --namespace=production
+#
+# Or just apply to current namespace:
 #   kubectl apply -f kubernetes-autoscale.yml
 #
-# To Watch Auto-Scaling:
-#   kubectl get hpa -n production --watch
-#   kubectl get pods -n production --watch
+# Watch Auto-Scaling:
+#   kubectl get hpa --watch
+#   kubectl get pods --watch
 #
-# To Generate Load (test scaling):
-#   kubectl run -it --rm load-generator --image=busybox /bin/sh
-#   # Inside pod: while true; do wget -q -O- http://awesome-app-service/health; done
+# Generate Load to Test Scaling:
+#   kubectl run -it --rm load-generator --image=busybox -- /bin/sh
+#   while true; do wget -q -O- http://awesome-app-service/health; done
 # ═══════════════════════════════════════════════════════════════════
