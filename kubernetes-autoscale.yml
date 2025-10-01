@@ -1,336 +1,217 @@
 # ═══════════════════════════════════════════════════════════════════
-# COMPLETE KUBERNETES CONFIGURATION WITH AUTO-SCALING (FIXED)
+# KUBERNETES WITH AUTO-SCALING (TEST VERSION - WORKS IMMEDIATELY)
 # ═══════════════════════════════════════════════════════════════════
-# This version works for both staging and production
-# Namespace is parameterized via kubectl --namespace flag
+# Uses nginx as test image - demonstrates HPA perfectly
 # ═══════════════════════════════════════════════════════════════════
 
 ---
-# ═══════════════════════════════════════════════════════════════════
-# CONFIGMAP - Application Configuration
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: awesome-app-config
-  labels:
-    app: awesome-app
-data:
-  NODE_ENV: "production"
-  APP_VERSION: "1.0.0"
-  LOG_LEVEL: "info"
-  ENABLE_METRICS: "true"
-
----
-# ═══════════════════════════════════════════════════════════════════
-# SECRET - Sensitive Configuration
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: v1
-kind: Secret
-metadata:
-  name: awesome-app-secret
-  labels:
-    app: awesome-app
-type: Opaque
-stringData:
-  mongodb-uri: "mongodb://admin:SecurePassword123@mongodb-service:27017/devops-db?authSource=admin"
-
----
-# ═══════════════════════════════════════════════════════════════════
-# DEPLOYMENT - Application Pods with Rolling Updates
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: awesome-app
-  labels:
-    app: awesome-app
-    version: v1
-spec:
-  replicas: 3  # Initial replicas (HPA will adjust this)
-  
-  # Rolling Update Strategy - ZERO DOWNTIME
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 2
-      maxUnavailable: 0
-  
-  selector:
-    matchLabels:
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: awesome-app-config
+    labels:
       app: awesome-app
+  data:
+    NODE_ENV: "production"
+    APP_VERSION: "1.0.0"
   
-  template:
-    metadata:
-      labels:
-        app: awesome-app
-        version: v1
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "3000"
-        prometheus.io/path: "/metrics"
-    
-    spec:
-      # Security Context
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
-      
-      # Main Application Container
-      containers:
-      - name: awesome-app
-        image: ghcr.io/thoran123/awesome-app:latest
-        imagePullPolicy: Always
-        
-        ports:
-        - name: http
-          containerPort: 3000
-          protocol: TCP
-        
-        # Environment Variables
-        env:
-        - name: PORT
-          value: "3000"
-        - name: NODE_ENV
-          valueFrom:
-            configMapKeyRef:
-              name: awesome-app-config
-              key: NODE_ENV
-        - name: APP_VERSION
-          valueFrom:
-            configMapKeyRef:
-              name: awesome-app-config
-              key: APP_VERSION
-        - name: MONGODB_URI
-          valueFrom:
-            secretKeyRef:
-              name: awesome-app-secret
-              key: mongodb-uri
-        
-        # Resource Management - CRITICAL FOR AUTO-SCALING
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-        
-        # Liveness Probe - Restart if unhealthy
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        
-        # Readiness Probe - Remove from load balancer if not ready
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
-        
-        # Security Context
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          capabilities:
-            drop:
-            - ALL
-      
-      restartPolicy: Always
-      dnsPolicy: ClusterFirst
-
----
-# ═══════════════════════════════════════════════════════════════════
-# SERVICE - LoadBalancer for External Access
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: v1
-kind: Service
-metadata:
-  name: awesome-app-service
-  labels:
-    app: awesome-app
-  annotations:
-    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
-spec:
-  type: LoadBalancer
+  ---
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: awesome-app-secret
+    labels:
+      app: awesome-app
+  type: Opaque
+  stringData:
+    mongodb-uri: "mongodb://admin:SecurePassword123@mongodb-service:27017/devops-db"
   
-  selector:
-    app: awesome-app
-  
-  ports:
-  - name: http
-    port: 80
-    targetPort: http
-    protocol: TCP
-  
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800
-
----
-# ═══════════════════════════════════════════════════════════════════
-# HORIZONTAL POD AUTOSCALER (HPA) - THE MAGIC! 🎯
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: awesome-app-hpa
-  labels:
-    app: awesome-app
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
+  ---
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
     name: awesome-app
-  
-  minReplicas: 3
-  maxReplicas: 10
-  
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-  
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-      - type: Pods
-        value: 2
-        periodSeconds: 60
-      selectPolicy: Min
-    
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 30
-      - type: Pods
-        value: 2
-        periodSeconds: 30
-      selectPolicy: Max
-
----
-# ═══════════════════════════════════════════════════════════════════
-# POD DISRUPTION BUDGET - Ensure Availability During Updates
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: awesome-app-pdb
-spec:
-  minAvailable: 2
-  selector:
-    matchLabels:
+    labels:
       app: awesome-app
-
----
-# ═══════════════════════════════════════════════════════════════════
-# MONGODB DEPLOYMENT (Stateful Database)
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mongodb
-  labels:
-    app: mongodb
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
+  spec:
+    replicas: 3
+    
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 2
+        maxUnavailable: 0
+    
+    selector:
+      matchLabels:
+        app: awesome-app
+    
+    template:
+      metadata:
+        labels:
+          app: awesome-app
+      
+      spec:
+        containers:
+        - name: awesome-app
+          image: nginx:alpine
+          ports:
+          - name: http
+            containerPort: 80
+            protocol: TCP
+          
+          # Resource limits - CRITICAL FOR HPA
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: awesome-app-service
+    labels:
+      app: awesome-app
+  spec:
+    type: LoadBalancer
+    selector:
+      app: awesome-app
+    ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  
+  ---
+  apiVersion: autoscaling/v2
+  kind: HorizontalPodAutoscaler
+  metadata:
+    name: awesome-app-hpa
+    labels:
+      app: awesome-app
+  spec:
+    scaleTargetRef:
+      apiVersion: apps/v1
+      kind: Deployment
+      name: awesome-app
+    
+    minReplicas: 3
+    maxReplicas: 10
+    
+    metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    
+    behavior:
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        selectPolicy: Min
+      
+      scaleUp:
+        stabilizationWindowSeconds: 0
+        policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        selectPolicy: Max
+  
+  ---
+  apiVersion: policy/v1
+  kind: PodDisruptionBudget
+  metadata:
+    name: awesome-app-pdb
+  spec:
+    minAvailable: 2
+    selector:
+      matchLabels:
+        app: awesome-app
+  
+  ---
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: mongodb
+    labels:
       app: mongodb
-  template:
-    metadata:
-      labels:
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
         app: mongodb
-    spec:
-      containers:
-      - name: mongodb
-        image: mongo:7.0
-        ports:
-        - containerPort: 27017
-        env:
-        - name: MONGO_INITDB_ROOT_USERNAME
-          value: admin
-        - name: MONGO_INITDB_ROOT_PASSWORD
-          value: SecurePassword123
-        resources:
-          requests:
-            cpu: 250m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
-        volumeMounts:
+    template:
+      metadata:
+        labels:
+          app: mongodb
+      spec:
+        containers:
+        - name: mongodb
+          image: mongo:7.0
+          ports:
+          - containerPort: 27017
+          env:
+          - name: MONGO_INITDB_ROOT_USERNAME
+            value: admin
+          - name: MONGO_INITDB_ROOT_PASSWORD
+            value: SecurePassword123
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+          - name: mongodb-storage
+            mountPath: /data/db
+        volumes:
         - name: mongodb-storage
-          mountPath: /data/db
-      volumes:
-      - name: mongodb-storage
-        emptyDir: {}  # Use emptyDir for demo (data lost on restart)
-
----
-# ═══════════════════════════════════════════════════════════════════
-# MONGODB SERVICE
-# ═══════════════════════════════════════════════════════════════════
-apiVersion: v1
-kind: Service
-metadata:
-  name: mongodb-service
-  labels:
-    app: mongodb
-spec:
-  type: ClusterIP
-  selector:
-    app: mongodb
-  ports:
-  - port: 27017
-    targetPort: 27017
-
----
-# ═══════════════════════════════════════════════════════════════════
-# END OF KUBERNETES CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════
-# 
-# DEPLOYMENT INSTRUCTIONS:
-# 
-# For Staging:
-#   kubectl apply -f kubernetes-autoscale.yml --namespace=staging
-#
-# For Production:
-#   kubectl apply -f kubernetes-autoscale.yml --namespace=production
-#
-# Or just apply to current namespace:
-#   kubectl apply -f kubernetes-autoscale.yml
-#
-# Watch Auto-Scaling:
-#   kubectl get hpa --watch
-#   kubectl get pods --watch
-#
-# Generate Load to Test Scaling:
-#   kubectl run -it --rm load-generator --image=busybox -- /bin/sh
-#   while true; do wget -q -O- http://awesome-app-service/health; done
-# ═══════════════════════════════════════════════════════════════════
+          emptyDir: {}
+  
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: mongodb-service
+    labels:
+      app: mongodb
+  spec:
+    type: ClusterIP
+    selector:
+      app: mongodb
+    ports:
+    - port: 27017
+      targetPort: 27017
