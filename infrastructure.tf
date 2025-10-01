@@ -20,7 +20,7 @@ terraform {
   
   backend "azurerm" {
     resource_group_name  = "terraform-state-rg"
-    storage_account_name = "tfstatedevops"  # Use your storage account name
+    storage_account_name = "tfstate1dc603"  # Use your storage account name
     container_name       = "tfstate"
     key                  = "awesome-devops.tfstate"
   }
