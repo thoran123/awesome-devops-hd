@@ -1,4 +1,4 @@
-```yaml
+
 # ═══════════════════════════════════════════════════════════════════
 # 🚀 AWESOME DEVOPS CI/CD PIPELINE WITH AUTO-SCALING (FIXED VERSION)
 # ═══════════════════════════════════════════════════════════════════
@@ -384,4 +384,3 @@ jobs:
 # Auto-scaling: Enabled with Horizontal Pod Autoscaler
 # Monitoring: Comprehensive health checks and verification
 # ═══════════════════════════════════════════════════════════════════
-```
