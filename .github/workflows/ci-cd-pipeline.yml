@@ -190,9 +190,7 @@ jobs:
       - name: 🚀 Deploy to Kubernetes
         run: |
           kubectl apply -f kubernetes-autoscale.yml --namespace=staging
-          kubectl set image deployment/awesome-app \
-            awesome-app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ github.sha }} \
-            --namespace=staging
+          
           kubectl rollout status deployment/awesome-app --namespace=staging --timeout=5m
 
       - name: 🏥 Health Check
