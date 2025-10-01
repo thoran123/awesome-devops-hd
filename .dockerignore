@@ -1,0 +1,12 @@
+.git
+.github
+.terraform
+node_modules
+npm-debug.log
+.env
+.gitignore
+README.md
+*.tf
+*.tfstate
+*.tfvars
+.terraform.lock.hcl
