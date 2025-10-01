@@ -3,59 +3,34 @@
   "version": "1.0.0",
   "description": "Complete DevOps Pipeline with Auto-Scaling - SIT722 Task 10.3HD",
   "main": "app-with-monitoring.js",
-  
-  // ───────────────────────────────────────────────────────────────────
-  // NPM SCRIPTS: Development and Build Commands
-  // ───────────────────────────────────────────────────────────────────
-  // Defines common commands for development, testing, and production
   "scripts": {
-    "start": "node app-with-monitoring.js",           // Production start
-    "dev": "nodemon app-with-monitoring.js",          // Development with auto-reload
-    "test": "echo 'Tests passed!'",                   // Main test command
-    "test:unit": "echo 'Unit tests passed!'",         // Unit tests only
-    "test:integration": "echo 'Integration tests passed!'", // Integration tests
-    "test:e2e": "echo 'E2E tests passed!'",           // End-to-end tests
-    "coverage": "echo 'Coverage generated!'"          // Test coverage report
+    "start": "node app-with-monitoring.js",
+    "dev": "nodemon app-with-monitoring.js",
+    "test": "echo 'Tests passed!'",
+    "test:unit": "echo 'Unit tests passed!'",
+    "test:integration": "echo 'Integration tests passed!'",
+    "test:e2e": "echo 'E2E tests passed!'",
+    "coverage": "echo 'Coverage generated!'"
   },
-  
-  // ───────────────────────────────────────────────────────────────────
-  // KEYWORDS: Package Discovery and Categorization
-  // ───────────────────────────────────────────────────────────────────
   "keywords": [
-    "devops",           // DevOps practices and tools
-    "kubernetes",       // Container orchestration
-    "auto-scaling",     // Automatic scaling capabilities
-    "ci-cd",           // Continuous Integration/Deployment
-    "azure",           // Cloud platform
-    "terraform"        // Infrastructure as Code
+    "devops",
+    "kubernetes",
+    "auto-scaling",
+    "ci-cd",
+    "azure",
+    "terraform"
   ],
-  
   "author": "Your Name",
   "license": "MIT",
-  
-  // ───────────────────────────────────────────────────────────────────
-  // DEPENDENCIES: Production Dependencies
-  // ───────────────────────────────────────────────────────────────────
-  // Packages required for the application to run in production
   "dependencies": {
-    "express": "^4.18.2",     // Web framework for Node.js
-    "mongoose": "^7.6.3",     // MongoDB object modeling
-    "cors": "^2.8.5"          // Cross-Origin Resource Sharing
+    "express": "^4.18.2",
+    "mongoose": "^7.6.3",
+    "cors": "^2.8.5"
   },
-  
-  // ───────────────────────────────────────────────────────────────────
-  // DEV DEPENDENCIES: Development Only Dependencies
-  // ───────────────────────────────────────────────────────────────────
-  // Packages only needed during development, not in production
   "devDependencies": {
-    "nodemon": "^3.0.1"       // Auto-restart server during development
+    "nodemon": "^3.0.1"
   },
-  
-  // ───────────────────────────────────────────────────────────────────
-  // ENGINES: Required Runtime Environment
-  // ───────────────────────────────────────────────────────────────────
-  // Specifies the Node.js version required to run the application
   "engines": {
-    "node": ">=18.0.0"        // Requires Node.js 18 or higher
+    "node": ">=18.0.0"
   }
 }
