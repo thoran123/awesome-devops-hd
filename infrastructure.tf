@@ -1,13 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════
-# COMPLETE AZURE INFRASTRUCTURE AS CODE (LOCAL STATE VERSION)
+# COMPLETE AZURE INFRASTRUCTURE AS CODE - UPDATED
 # ═══════════════════════════════════════════════════════════════════
-# This single file provisions entire Azure infrastructure including:
-# - AKS Cluster with Auto-Scaling (2-10 nodes)
-# - Container Registry
-# - CosmosDB (MongoDB API)
-# - Virtual Network & Security
-# - Log Analytics & Application Insights
-# - Monitoring Alerts
+# Fixed for current Azure provider version
 # ═══════════════════════════════════════════════════════════════════
 
 terraform {
@@ -24,14 +18,12 @@ terraform {
     }
   }
   
-  # Backend commented out for local state (simpler for demo)
-  # In production, uncomment this for remote state
-  # backend "azurerm" {
-  #   resource_group_name  = "terraform-state-rg"
-  #   storage_account_name = "tfstate1dc603"
-  #   container_name       = "tfstate"
-  #   key                  = "awesome-devops.tfstate"
-  # }
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "tfstatedevops"  # Use your storage account name
+    container_name       = "tfstate"
+    key                  = "awesome-devops.tfstate"
+  }
 }
 
 provider "azurerm" {
@@ -165,15 +157,20 @@ resource "random_string" "acr_suffix" {
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# AZURE KUBERNETES SERVICE (AKS) WITH AUTO-SCALING
+# AZURE KUBERNETES SERVICE (AKS) WITH AUTO-SCALING - FIXED
 # ═══════════════════════════════════════════════════════════════════
+
+# Get available Kubernetes versions
+data "azurerm_kubernetes_service_versions" "current" {
+  location = var.location
+}
 
 resource "azurerm_kubernetes_cluster" "main" {
   name                = "${var.resource_prefix}-aks"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   dns_prefix          = "${var.resource_prefix}-aks"
-  kubernetes_version  = "1.27.7"
+  kubernetes_version  = data.azurerm_kubernetes_service_versions.current.latest_version
 
   # Default node pool with AUTOSCALING
   default_node_pool {
@@ -186,6 +183,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     node_count          = 3
     os_disk_size_gb     = 30
     
+    # Node labels for workload optimization
     node_labels = {
       "workload" = "general"
     }
@@ -193,33 +191,33 @@ resource "azurerm_kubernetes_cluster" "main" {
     tags = local.common_tags
   }
 
+  # System-assigned managed identity
   identity {
     type = "SystemAssigned"
   }
 
+  # Network profile for advanced networking - FIXED
   network_profile {
     network_plugin     = "azure"
     network_policy     = "azure"
     load_balancer_sku  = "standard"
     service_cidr       = "10.1.0.0/16"
     dns_service_ip     = "10.1.0.10"
-    docker_bridge_cidr = "172.17.0.1/16"
+    # Removed deprecated docker_bridge_cidr
   }
 
+  # Enable monitoring with Log Analytics
   oms_agent {
     log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   }
 
+  # Enable Azure Policy
   azure_policy_enabled = true
 
+  # Auto-scaler profile
   auto_scaler_profile {
-    balance_similar_node_groups      = true
-    expander                          = "random"
+    balance_similar_node_groups      = false
     max_graceful_termination_sec     = 600
-    max_node_provisioning_time       = "15m"
-    max_unready_nodes                = 3
-    max_unready_percentage           = 45
-    new_pod_scale_up_delay           = "10s"
     scale_down_delay_after_add       = "10m"
     scale_down_delay_after_delete    = "10s"
     scale_down_delay_after_failure   = "3m"
@@ -231,6 +229,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   tags = local.common_tags
 }
 
+# Grant AKS access to ACR
 resource "azurerm_role_assignment" "aks_acr" {
   principal_id                     = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
   role_definition_name             = "AcrPull"
@@ -239,7 +238,7 @@ resource "azurerm_role_assignment" "aks_acr" {
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# COSMOSDB WITH MONGODB API
+# COSMOSDB WITH MONGODB API - FIXED
 # ═══════════════════════════════════════════════════════════════════
 
 resource "azurerm_cosmosdb_account" "main" {
@@ -299,6 +298,7 @@ resource "azurerm_monitor_action_group" "main" {
   tags = local.common_tags
 }
 
+# Alert for high CPU usage
 resource "azurerm_monitor_metric_alert" "high_cpu" {
   name                = "${var.resource_prefix}-high-cpu-alert"
   resource_group_name = azurerm_resource_group.main.name
@@ -323,6 +323,7 @@ resource "azurerm_monitor_metric_alert" "high_cpu" {
   tags = local.common_tags
 }
 
+# Alert for high memory usage
 resource "azurerm_monitor_metric_alert" "high_memory" {
   name                = "${var.resource_prefix}-high-memory-alert"
   resource_group_name = azurerm_resource_group.main.name
@@ -358,6 +359,7 @@ provider "kubernetes" {
   cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config.0.cluster_ca_certificate)
 }
 
+# Create namespaces
 resource "kubernetes_namespace" "staging" {
   metadata {
     name = "staging"
@@ -382,6 +384,7 @@ resource "kubernetes_namespace" "production" {
   depends_on = [azurerm_kubernetes_cluster.main]
 }
 
+# Create secrets for MongoDB connection - FIXED
 resource "kubernetes_secret" "mongodb_staging" {
   metadata {
     name      = "mongodb-secret"
@@ -389,7 +392,7 @@ resource "kubernetes_secret" "mongodb_staging" {
   }
 
   data = {
-    connection-string = azurerm_cosmosdb_account.main.connection_strings[0]
+    connection-string = "mongodb://${azurerm_cosmosdb_account.main.name}:${azurerm_cosmosdb_account.main.primary_key}@${azurerm_cosmosdb_account.main.name}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${azurerm_cosmosdb_account.main.name}@"
   }
 
   type = "Opaque"
@@ -402,14 +405,14 @@ resource "kubernetes_secret" "mongodb_production" {
   }
 
   data = {
-    connection-string = azurerm_cosmosdb_account.main.connection_strings[0]
+    connection-string = "mongodb://${azurerm_cosmosdb_account.main.name}:${azurerm_cosmosdb_account.main.primary_key}@${azurerm_cosmosdb_account.main.name}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@${azurerm_cosmosdb_account.main.name}@"
   }
 
   type = "Opaque"
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# OUTPUTS
+# OUTPUTS - FIXED
 # ═══════════════════════════════════════════════════════════════════
 
 output "resource_group_name" {
@@ -450,7 +453,7 @@ output "cosmosdb_endpoint" {
 }
 
 output "cosmosdb_connection_string" {
-  value       = azurerm_cosmosdb_account.main.connection_strings[0]
+  value       = "mongodb://${azurerm_cosmosdb_account.main.name}:${azurerm_cosmosdb_account.main.primary_key}@${azurerm_cosmosdb_account.main.name}.mongo.cosmos.azure.com:10255/?ssl=true&replicaSet=globaldb"
   description = "CosmosDB connection string"
   sensitive   = true
 }
@@ -509,9 +512,3 @@ output "infrastructure_summary" {
   EOT
   description = "Infrastructure deployment summary"
 }
-
-# ═══════════════════════════════════════════════════════════════════
-# END OF INFRASTRUCTURE CONFIGURATION
-# Total Resources Created: 15+
-# Features: AKS, ACR, CosmosDB, VNet, Monitoring, Alerts, Auto-Scaling
-# ═══════════════════════════════════════════════════════════════════
