@@ -1,3 +1,16 @@
+# ═══════════════════════════════════════════════════════════════════
+# KUBERNETES AUTOSCALE CONFIGURATION - COMPLETE DEPLOYMENT MANIFEST
+# ═══════════════════════════════════════════════════════════════════
+# This file defines a complete Kubernetes deployment with auto-scaling
+# Includes: ConfigMap, Secret, Deployment, Service, HPA, PDB, MongoDB
+# Auto-scaling: Horizontal Pod Autoscaler with CPU/Memory metrics
+# ═══════════════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────────────
+# CONFIGMAP: Application Configuration
+# ───────────────────────────────────────────────────────────────────
+# Stores non-sensitive configuration data as key-value pairs
+# Used for environment variables that don't contain secrets
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,6 +21,11 @@ data:
   NODE_ENV: production
   APP_VERSION: 1.0.0
 ---
+# ───────────────────────────────────────────────────────────────────
+# SECRET: Sensitive Configuration Data
+# ───────────────────────────────────────────────────────────────────
+# Stores sensitive information like passwords, API keys
+# Encoded in base64, should be properly secured in production
 apiVersion: v1
 kind: Secret
 metadata:
@@ -15,9 +33,14 @@ metadata:
   labels:
     app: awesome-app
 type: Opaque
-stringData:
+stringData:  # stringData is not encoded, Kubernetes handles encoding
   mongodb-uri: mongodb://admin:SecurePassword123@mongodb-service:27017/devops-db
 ---
+# ───────────────────────────────────────────────────────────────────
+# DEPLOYMENT: Main Application Deployment
+# ───────────────────────────────────────────────────────────────────
+# Defines how to deploy the application pods
+# Includes: Replica count, update strategy, resource limits, health checks
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,12 +48,12 @@ metadata:
   labels:
     app: awesome-app
 spec:
-  replicas: 3
+  replicas: 3  # Initial number of pods
   strategy:
-    type: RollingUpdate
+    type: RollingUpdate  # Zero-downtime deployment strategy
     rollingUpdate:
-      maxSurge: 2
-      maxUnavailable: 0
+      maxSurge: 2        # Maximum additional pods during update
+      maxUnavailable: 0  # No pods unavailable during update
   selector:
     matchLabels:
       app: awesome-app
@@ -41,30 +64,35 @@ spec:
     spec:
       containers:
       - name: awesome-app
-        image: nginx:alpine
+        image: nginx:alpine  # Lightweight base image
         ports:
         - name: http
           containerPort: 80
         resources:
-          requests:
-            cpu: 100m
+          requests:    # Minimum resources guaranteed
+            cpu: 100m  # 0.1 CPU cores
             memory: 128Mi
-          limits:
-            cpu: 500m
+          limits:      # Maximum resources allowed
+            cpu: 500m  # 0.5 CPU cores
             memory: 512Mi
-        livenessProbe:
+        livenessProbe:   # Checks if container is alive
           httpGet:
             path: /
             port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 10
-        readinessProbe:
+          initialDelaySeconds: 10  # Wait 10s before first probe
+          periodSeconds: 10        # Check every 10 seconds
+        readinessProbe:  # Checks if container is ready to serve traffic
           httpGet:
             path: /
             port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          initialDelaySeconds: 5   # Wait 5s before first probe
+          periodSeconds: 5         # Check every 5 seconds
 ---
+# ───────────────────────────────────────────────────────────────────
+# SERVICE: Network Access to Application
+# ───────────────────────────────────────────────────────────────────
+# Exposes the deployment to network traffic
+# LoadBalancer type creates external cloud load balancer
 apiVersion: v1
 kind: Service
 metadata:
@@ -72,7 +100,7 @@ metadata:
   labels:
     app: awesome-app
 spec:
-  type: LoadBalancer
+  type: LoadBalancer  # External load balancer
   selector:
     app: awesome-app
   ports:
@@ -80,6 +108,11 @@ spec:
     port: 80
     targetPort: 80
 ---
+# ───────────────────────────────────────────────────────────────────
+# HORIZONTAL POD AUTOSCALER (HPA): Auto-scaling Configuration
+# ───────────────────────────────────────────────────────────────────
+# Automatically scales the number of pods based on CPU/Memory usage
+# Monitors metrics and adjusts replicas between min and max
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -91,47 +124,57 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: awesome-app
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 3    # Minimum number of pods
+  maxReplicas: 10   # Maximum number of pods
   metrics:
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70
+        averageUtilization: 70  # Scale up when CPU > 70%
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 80
+        averageUtilization: 80  # Scale up when Memory > 80%
   behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
+    scaleDown:      # Conservative scale-down to prevent flapping
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
       policies:
       - type: Percent
-        value: 50
+        value: 50   # Maximum 50% reduction at once
         periodSeconds: 60
-      selectPolicy: Min
-    scaleUp:
-      stabilizationWindowSeconds: 0
+      selectPolicy: Min  # Use the most conservative policy
+    scaleUp:        # Aggressive scale-up for rapid response
+      stabilizationWindowSeconds: 0  # Scale up immediately
       policies:
       - type: Percent
-        value: 100
+        value: 100  # Can double the number of pods
         periodSeconds: 30
-      selectPolicy: Max
+      selectPolicy: Max  # Use the most aggressive policy
 ---
+# ───────────────────────────────────────────────────────────────────
+# POD DISRUPTION BUDGET (PDB): High Availability Guarantee
+# ───────────────────────────────────────────────────────────────────
+# Ensures minimum number of pods are always available during disruptions
+# Prevents too many pods being terminated simultaneously
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: awesome-app-pdb
 spec:
-  minAvailable: 2
+  minAvailable: 2  # At least 2 pods must always be available
   selector:
     matchLabels:
       app: awesome-app
 ---
+# ───────────────────────────────────────────────────────────────────
+# MONGODB DEPLOYMENT: Database Backend
+# ───────────────────────────────────────────────────────────────────
+# Standalone MongoDB deployment for data persistence
+# Uses emptyDir for storage (replace with PersistentVolume in production)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -170,8 +213,13 @@ spec:
           mountPath: /data/db
       volumes:
       - name: mongodb-storage
-        emptyDir: {}
+        emptyDir: {}  # Temporary storage - use PersistentVolume in production
 ---
+# ───────────────────────────────────────────────────────────────────
+# MONGODB SERVICE: Database Network Access
+# ───────────────────────────────────────────────────────────────────
+# Internal service for MongoDB, not exposed externally
+# ClusterIP type means it's only accessible within the cluster
 apiVersion: v1
 kind: Service
 metadata:
@@ -179,9 +227,17 @@ metadata:
   labels:
     app: mongodb
 spec:
-  type: ClusterIP
+  type: ClusterIP  # Internal cluster IP only
   selector:
     app: mongodb
   ports:
   - port: 27017
     targetPort: 27017
+
+# ═══════════════════════════════════════════════════════════════════
+# END OF KUBERNETES AUTOSCALE CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════
+# Summary: Complete application stack with auto-scaling capabilities
+# Features: High availability, zero-downtime deployments, resource management
+# Security: Resource limits, health checks, proper service exposure
+# ═══════════════════════════════════════════════════════════════════
