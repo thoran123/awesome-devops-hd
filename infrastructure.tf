@@ -602,10 +602,10 @@ output "infrastructure_summary" {
   description = "Infrastructure deployment summary"
 }
 
-# ═══════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════
 # END OF TERRAFORM INFRASTRUCTURE CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════
 # Summary: Complete Azure infrastructure with auto-scaling capabilities
 # Resources: AKS, ACR, CosmosDB, Networking, Monitoring, Alerts
 # Features: High availability, security, monitoring, cost optimization
-# ═══════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════
